@@ -437,6 +437,16 @@ function runInterfaceListNextStepsUsers(index) {
                         }
                         reservedIndex = orderArray[i];
                         break;
+                    } else if (xh_args.time !== "all") {   // 判断是否指定时间
+                        let time = field.fieldSJD[orderArray[i]].substring(0, field.fieldSJD[orderArray[i]].indexOf("-"));
+                        if (xh_args.time === time) {    // 判断对应场地的对应时间是否与指定时间相等
+                            reservedIndex = orderArray[i];
+                            break;
+                        } else {
+                            let random = Math.floor((Math.random() * orderArray.length));
+                            reservedIndex = orderArray[random];
+                            break;
+                        }
                     }
                 } else {    // 不指定场地
                     if (xh_args.time !== "all") {   // 判断是否指定时间
