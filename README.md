@@ -8,8 +8,6 @@
 
 # License
 
-<a href="LICENSE"><img src="https://img.shields.io/github/license/fstudio/clangbuilder.svg"></a>
-
 本项目遵循`GNU license`，方便交流与学习，包括但不限于本项目的衍生品都禁止在损害广州大学官方利益情况下进行盈利。如果您发现本项目有侵犯您的知识产权，请与我取得联系或提出 issue，我会及时修改或删除。
 
 # Log
