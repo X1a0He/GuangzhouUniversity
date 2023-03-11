@@ -14,6 +14,22 @@
 
 # Log
 
+- 2023-03-11 14:00 Update [yuyue.js](https://github.com/X1a0He/GuangzhouUniversity/blob/main/yuyue.js)
+
+1. 合并了 Env 的 get 和 post 代码逻辑
+2. 移除了用正则表达式匹配的方式来处理 `csrfToken`、`workflowId`、`formStepId`，取而代之的是 `getTextBetween` 方法
+3. 当获取预约链接失败时，不再执行脚本
+4. 优化了主方法的运行逻辑和对Cookie的判断逻辑
+5. 优化了预约执行时间 `duration` 的计算位置，尽量精确计算
+6. 优化了 `run_main` 方法的所有子方法判断逻辑
+7. 移除了冗余的 `TYCDYYM_YYXM` 和 `TYCDYYM_YYDD` 请求，进一步加快了预约的时间
+8. 优化了 `handleData` 方法对数据的处理
+9. 优化了预约链接的获取，避免出现获取失败的情况
+10. 修复了当指定场地号数大于系统放出的号数时，无法对其判断造成后续预约失败的问题
+11. 优化精简了对指定时间指定场地号数的判断和提交逻辑，用简短的代码实现同样的目的
+12. 简单优化了 `safeGet` 方法
+13. 重写 `Env` 中的 `getCurrentTime` 和 `getTime` 方法，更加高效可控
+
 - 2023-03-03 13:30 Upload [yuyue.js](https://github.com/X1a0He/GuangzhouUniversity/blob/main/yuyue.js)
 
 ```

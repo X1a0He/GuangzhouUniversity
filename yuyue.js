@@ -23,67 +23,56 @@ let xh_args = {
     }
 };
 let csrfToken, workflowId, formData, cookieExpired = false, gender,
-    formStepId, instanceId, entryId, codeName, codeId, field, reserved,
-    cDXXList, orderArray = [], reservedIndex, startTime, specifyCount = 0, specifyComplete = false,
-    message, reservedSuccess = false, notNow = false;
+    formStepId, instanceId, entryId, codeName, codeId, field, getLinkFailed,
+    cDXXList, orderArray = [], reservedIndex, reservedTime, specifyCount = 0, specifyComplete = false,
+    message = "", reservedSuccess = false, notNow = false, firstSelectComplete = false;
 !(async () => {
     $.loadAuthor();
-    if (xh_args.cookie === "") {
+    if (!xh_args.cookie) {
         console.log(`[${$.getTime()}] 请先填写Cookie，登录地址: https://usc.gzhu.edu.cn/infoplus/form/TYCDYY/start`);
-    } else {
-        xh_args.headers.Cookie = xh_args.cookie;
-        message = '';
-        if (xh_args.run_immediately) {
-            await run_main();
-        } else {
-            console.log(`[${$.getTime()}] 本次任务不会立即执行，将在 ${xh_args.run_time} 后执行...`);
-            do {
-                console.log(`[${$.getTime()}] 等待运行中...`);
-                await $.wait(xh_args.interval);
-            } while ($.getNow() < xh_args.run_time);
-            await run_main();
+        return;
+    }
+    xh_args.headers.Cookie = xh_args.cookie;
+    message = '';
+    if (!xh_args.run_immediately) {
+        console.log(`[${$.getTime()}] 本次任务不会立即执行，将在 ${xh_args.run_time} 后执行...`);
+        while ($.getCurrentTime() < xh_args.run_time) {
+            console.log(`[${$.getTime()}] 等待运行中...`);
+            await $.wait(xh_args.interval);
         }
-        message += `预约执行完毕，预约耗时 ${((new Date).getTime() - startTime) / 1e3} 秒\n`;
-        console.log(`[${$.getTime()}] 预约执行完毕，预约耗时 ${((new Date).getTime() - startTime) / 1e3} 秒`);
-        if (xh_args.barkId) {
-            console.log(`\n[${$.getTime()}] 正在推送结果...`);
-            message += `\n执行时间: ${$.getTime()}\n版本代码: 20230303`;
-            await sendBark("广州大学羽毛球场地预约情况");
-        }
+    }
+    await run_main();
+    const duration = ((new Date).getTime() - reservedTime) / 1e3;
+    message += `预约执行完毕，预约耗时 ${duration} 秒\n`;
+    console.log(`[${$.getTime()}] 预约执行完毕，预约耗时 ${duration} 秒`);
+    console.log(`[${$.getTime()}] 版本代码: 20230311`);
+    if (xh_args.barkId) {
+        console.log(`\n[${$.getTime()}] 正在推送结果...`);
+        message += `\n执行时间: ${$.getTime()}\n版本代码: 20230311`;
+        await sendBark("广州大学羽毛球场地预约情况");
     }
 })().catch((e) => {
     $.log("", `❌ ${$.name}, 失败! 原因: ${e}!`, "");
-}).finally(() => {
-    $.done();
-});
+}).finally(() => $.done());
 
 async function run_main() {
     console.log(`[${$.getTime()}] 开始获取预约链接`);
     await initData();
-    startTime = (new Date).getTime();
+    reservedTime = (new Date).getTime();
     await runTYCDYYStart();
-    if (!cookieExpired) {
-        reserved = false;
-        await runInterfaceStart();
-        if (!reserved) {
-            await runInterfaceRender();
-            if (!notNow) {
-                await runInterfaceSuggest("TYCDYYM_YYXM", "", true);
-                await runInterfaceSuggest("TYCDYYM_YYDD", "羽毛球", false);
-                await runInterfaceSuggest("TYCDYY_YYRQ", "", true);
-                specifyCount = 0;
-                await runInterfaceFieldChanging();
-                for (let i = 0; i < xh_args.retry_count; i++) {
-                    if (!reserved) {
-                        reservedSuccess = false;
-                        await runInterfaceListNextStepsUsers(i);
-                        if (reservedSuccess) {
-                            await doAction();
-                        }
-                    } else break;
-                }
-            }
-        }
+    if (cookieExpired) return;
+    getLinkFailed = false;
+    await runInterfaceStart();
+    if (getLinkFailed) return;
+    await runInterfaceRender();
+    if (notNow) return;
+    await runInterfaceSuggest("TYCDYY_YYRQ", "", true);
+    specifyCount = 0;
+    await runInterfaceFieldChanging();
+    for (let i = 0; i < xh_args.retry_count && !reserved; i++) {
+        reservedSuccess = false;
+        await runInterfaceListNextStepsUsers(i);
+        if (reservedSuccess) await doAction();
     }
 }
 
@@ -111,23 +100,19 @@ function initData() {
 
 function runTYCDYYStart() {
     return new Promise((resolve) => {
-        const options = {
+        $.request('get', {
             url: 'https://usc.gzhu.edu.cn/infoplus/form/TYCDYY/start',
             headers: xh_args.headers
-        };
-        $.get(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
-                if (data.indexOf("你好呀") !== -1) {
+                if (data.includes("你好呀")) {
                     cookieExpired = true;
                     message += "Cookie失效，请重新登录\n";
                     console.log(`[${$.getTime()}] Cookie失效，请重新登录`);
                 } else {
-                    csrfToken = data.match(new RegExp(/csrfToken" content="(.*?)"/));
-                    csrfToken = csrfToken[1];
-                    message += `csrfToken:${csrfToken}\n`;
-                    workflowId = data.match(new RegExp(/workflowId = "(.*?)"/));
-                    workflowId = workflowId[1];
-                    message += `workflowId:${workflowId}\n`;
+                    csrfToken = getTextBetween(data, `csrfToken" content="`, `"`);
+                    workflowId = getTextBetween(data, `workflowId = "`, `"`);
+                    message += `csrfToken:${csrfToken}\nworkflowId:${workflowId}\\n`;
                 }
             } catch (e) {
                 console.log(e);
@@ -139,14 +124,12 @@ function runTYCDYYStart() {
 }
 
 function handleData(obj) {
-    const arr = [];
-    for (let key in obj) arr.push(`${encodeURIComponent(key)}=${encodeURIComponent(obj[key])}`);
-    return arr.join('&');
+    return Object.entries(obj).map(([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`).join('&');
 }
 
 function runInterfaceStart() {
     return new Promise((resolve) => {
-        const options = {
+        $.request('post', {
             url: 'https://usc.gzhu.edu.cn/infoplus/interface/start',
             body: handleData({
                 idc: 'TYCDYY',
@@ -156,18 +139,26 @@ function runInterfaceStart() {
                 lang: 'zh'
             }),
             headers: xh_args.headers
-        };
-        $.post(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
                 if (safeGet(data)) {
-                    let { entities, errno, error } = JSON.parse(data);
+                    const { entities, errno, error } = JSON.parse(data);
                     if (errno === 14004) {
                         console.log(`[${$.getTime()}] 预约链接获取失败: ${error}`);
-                        reserved = true;
+                        getLinkFailed = true;
                     } else {
-                        gender = entities[0];
-                        message += `预约链接为: ${entities[0]}\n\n`;
-                        console.log(`[${$.getTime()}] 预约链接获取成功`);
+                        getLinkFailed = false;
+                        const index = entities.findIndex(link => link.includes("https://usc.gzhu.edu.cn/infoplus/form"));
+                        if (index !== -1) {
+                            gender = entities[index];
+                            formStepId = getTextBetween(gender, "form/", "/render");
+                            xh_args.headers.referer = gender;
+                            message += `预约链接为: ${gender}\n\n`;
+                            console.log(`[${$.getTime()}] 预约链接获取成功`);
+                        } else {
+                            console.log(`[${$.getTime()}] 预约链接获取失败`);
+                            getLinkFailed = true;
+                        }
                     }
                 }
             } catch (e) {
@@ -181,10 +172,7 @@ function runInterfaceStart() {
 
 function runInterfaceRender() {
     return new Promise((resolve) => {
-        formStepId = gender.match(new RegExp(/form\/(\d+)\/render/));
-        formStepId = formStepId[1];
-        xh_args.headers.referer = gender;
-        const options = {
+        $.request('post', {
             url: 'https://usc.gzhu.edu.cn/infoplus/interface/render',
             body: handleData({
                 stepId: formStepId,
@@ -196,15 +184,14 @@ function runInterfaceRender() {
                 csrfToken: csrfToken
             }),
             headers: xh_args.headers
-        };
-        $.post(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
                 if (safeGet(data)) {
-                    let { entities, errno, error } = JSON.parse(data);
+                    const { entities, errno, error } = JSON.parse(data);
                     if (errno === 22001) {
                         console.log(`[${$.getTime()}] ${error}`);
                         console.log(`[${$.getTime()}] ${JSON.stringify(data)}`);
-                        notNow = error.indexOf("中午12点半后") !== -1;
+                        notNow = error.includes("中午12点半后");
                     } else if (errno === 0) {
                         notNow = false;
                         let info = entities[0].data;
@@ -257,7 +244,7 @@ function fieldChanging(obj) {
         "fieldYYXM_Name": "羽毛球",
         "fieldXZDD": xh_args.location,
         "fieldXZDD_Name": xh_args.location,
-        "fieldXZDD_Attr": "{\"_parent\":\"羽毛球\"}",
+        "fieldXZDD_Attr": `{"_parent":"羽毛球"}`,
         "fieldYYRQ": codeId,
         "fieldYYRQ_Name": codeName,
         "fieldZJ": codeId
@@ -267,10 +254,7 @@ function fieldChanging(obj) {
 
 function runInterfaceSuggest(code, parent, isTopLevel) {
     return new Promise((resolve) => {
-        formStepId = gender.match(new RegExp(/form\/(\d+)\/render/));
-        formStepId = formStepId[1];
-        xh_args.headers.referer = gender;
-        const options = {
+        $.request('post', {
             url: 'https://usc.gzhu.edu.cn/infoplus/interface/suggest',
             body: handleData({
                 prefix: "",
@@ -289,8 +273,7 @@ function runInterfaceSuggest(code, parent, isTopLevel) {
                 workflowId: null
             }),
             headers: xh_args.headers
-        };
-        $.post(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
                 if (safeGet(data)) {
                     let { items } = JSON.parse(data);
@@ -315,10 +298,7 @@ function runInterfaceSuggest(code, parent, isTopLevel) {
 
 function runInterfaceFieldChanging() {
     return new Promise((resolve) => {
-        formStepId = gender.match(new RegExp(/form\/(\d+)\/render/));
-        formStepId = formStepId[1];
-        xh_args.headers.referer = gender;
-        const options = {
+        $.request('post', {
             url: 'https://usc.gzhu.edu.cn/infoplus/interface/fieldChanging',
             body: handleData({
                 formData: JSON.stringify(field),
@@ -334,8 +314,7 @@ function runInterfaceFieldChanging() {
                 workflowId: null
             }),
             headers: xh_args.headers
-        };
-        $.post(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
                 if (safeGet(data)) {
                     let { errno, ecode, error, entities } = JSON.parse(data);
@@ -366,11 +345,12 @@ function runInterfaceFieldChanging() {
                         field.fieldYYZT = [];
                         field.fieldXZ = [];
                         field.fieldFZPD = [];
-                        if (+xh_args.area > cDXXList.length / 2) {
-                            console.log(`[${$.getTime()}] 指定号数超过系统放出号数，已启用备用号数 ${+xh_args.spare_area}`);
+                        const maxField = Math.max(...cDXXList.map(field => parseInt(field.yYCD.match(/\d+/)[0])));
+                        if (+xh_args.area > maxField) {
+                            console.log(`[${$.getTime()}] 指定场地号数 ${xh_args.area} 超过系统放出场地最大号数 ${maxField}，已启用备用场地号数 ${+xh_args.spare_area}`);
                             xh_args.area = +xh_args.spare_area;
-                            console.log(`[${$.getTime()}] 当前指定场地号数为 ${+xh_args.area}`);
                         }
+                        console.log(`[${$.getTime()}] 当前指定场地号数为 ${+xh_args.area}`);
                         for (let i = 0; i < cDXXList.length; i++) {
                             field.groupCDXXList.push(cDXXList[i].entityIndex);
                             field.fieldSJD.push(cDXXList[i].sJD);
@@ -380,30 +360,15 @@ function runInterfaceFieldChanging() {
                             field.fieldYYZT.push(cDXXList[i].yYZT);
                             field.fieldXZ.push(false);
                             field.fieldFZPD.push(cDXXList[i].fZPD);
-                            if (+xh_args.area !== 0) {
-                                if (cDXXList[i].yYCD === `${xh_args.area}号场`) {
-                                    if (xh_args.time !== "all") {
-                                        let time = field.fieldSJD[i].substring(0, field.fieldSJD[i].indexOf("-"));
-                                        if (xh_args.time === time) {
-                                            specifyCount++;
-                                        }
-                                    } else {
+                            if (+xh_args.area === 0 || cDXXList[i].yYCD !== `${xh_args.area}号场`) {
+                                if (xh_args.time !== "all") {
+                                    if (field.fieldSJD[i].replace(/\s/g, "").startsWith(`${xh_args.time}-`)) {
                                         specifyCount++;
-                                    }
-                                } else {
-                                    if (xh_args.time !== "all") {
-                                        let time = field.fieldSJD[i].substring(0, field.fieldSJD[i].indexOf("-"));
-                                        if (xh_args.time === time) {
-                                            specifyCount++;
-                                        }
                                     }
                                 }
                             } else {
-                                if (xh_args.time !== "all") {
-                                    let time = field.fieldSJD[i].substring(0, field.fieldSJD[i].indexOf("-"));
-                                    if (xh_args.time === time) {
-                                        specifyCount++;
-                                    }
+                                if (xh_args.time === "all" || field.fieldSJD[i].replace(/\s/g, "").startsWith(`${xh_args.time}-`)) {
+                                    specifyCount++;
                                 }
                             }
                         }
@@ -420,56 +385,44 @@ function runInterfaceFieldChanging() {
 
 function runInterfaceListNextStepsUsers(index) {
     return new Promise((resolve) => {
-        formStepId = gender.match(new RegExp(/form\/(\d+)\/render/));
-        formStepId = formStepId[1];
-        xh_args.headers.referer = gender;
         if (!specifyComplete) {
             for (let i = 0; i < orderArray.length; i++) {
-                /* 先判断场地再判断时间会更快 */
-                if (+xh_args.area !== 0) {   // 如果指定了场地的号数，例如3号场地
-                    if (field.fieldYYCD[orderArray[i]] === `${xh_args.area}号场`) {   // 如果遍历到的场地是指定场地
-                        if (xh_args.time !== "all") {   // 判断是否指定时间
-                            let time = field.fieldSJD[orderArray[i]].substring(0, field.fieldSJD[orderArray[i]].indexOf("-"));
-                            if (xh_args.time === time) {    // 判断对应场地的对应时间是否与指定时间相等
+                const time = field.fieldSJD[i].replace(/\s/g, "");
+                const areaNumber = `${xh_args.area}号场`;
+                if (xh_args.time !== "all") {
+                    if (time.startsWith(`${xh_args.time}`)) {
+                        if (firstSelectComplete) {
+                            reservedIndex = orderArray[i];
+                            break;
+                        } else {
+                            if (+xh_args.area !== 0 && field.fieldYYCD[orderArray[i]].replace(/\s/g, "").includes(areaNumber)) {
+                                reservedIndex = orderArray[i];
+                                firstSelectComplete = true;
+                                break;
+                            } else if (+xh_args.area === 0) {
                                 reservedIndex = orderArray[i];
                                 break;
-                            } else continue;
-                        }
-                        reservedIndex = orderArray[i];
-                        break;
-                    } else if (xh_args.time !== "all") {   // 判断是否指定时间
-                        let time = field.fieldSJD[orderArray[i]].substring(0, field.fieldSJD[orderArray[i]].indexOf("-"));
-                        if (xh_args.time === time) {    // 判断对应场地的对应时间是否与指定时间相等
-                            reservedIndex = orderArray[i];
-                            break;
-                        } else {
-                            let random = Math.floor((Math.random() * orderArray.length));
-                            reservedIndex = orderArray[random];
-                            break;
+                            }
                         }
                     }
-                } else {    // 不指定场地
-                    if (xh_args.time !== "all") {   // 判断是否指定时间
-                        let time = field.fieldSJD[orderArray[i]].substring(0, field.fieldSJD[orderArray[i]].indexOf("-"));
-                        if (xh_args.time === time) {    // 判断对应场地的对应时间是否与指定时间相等
-                            reservedIndex = orderArray[i];
-                            break;
-                        } else {
-                            let random = Math.floor((Math.random() * orderArray.length));
-                            reservedIndex = orderArray[random];
-                            break;
-                        }
-                    }
+                } else if (+xh_args.area !== 0 && field.fieldYYCD[orderArray[i]].replace(/\s/g, "") === areaNumber) {
+                    reservedIndex = orderArray[i];
+                    break;
+                }
+                if (xh_args.time === "all" && +xh_args.area === 0) {
+                    const random = Math.floor((Math.random() * orderArray.length));
+                    reservedIndex = orderArray[random];
+                    break;
                 }
             }
         } else {
-            let random = Math.floor((Math.random() * orderArray.length));
+            const random = Math.floor((Math.random() * orderArray.length));
             reservedIndex = orderArray[random];
         }
         console.log(`[${$.getTime()}] 第 ${index + 1} 次预约 ${field.fieldSJD[reservedIndex]} ${field.fieldYYCD[reservedIndex]}`);
         message += `第 ${index + 1} 次预约 ${field.fieldSJD[reservedIndex]} ${field.fieldYYCD[reservedIndex]}\n`;
         field.fieldXZ[reservedIndex] = true;
-        const options = {
+        $.request('post', {
             url: 'https://usc.gzhu.edu.cn/infoplus/interface/listNextStepsUsers',
             body: handleData({
                 formData: JSON.stringify(field),
@@ -482,8 +435,7 @@ function runInterfaceListNextStepsUsers(index) {
                 lang: 'zh'
             }),
             headers: xh_args.headers
-        };
-        $.post(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
                 if (safeGet(data)) {
                     let result = JSON.parse(data);
@@ -513,12 +465,9 @@ function runInterfaceListNextStepsUsers(index) {
 
 function doAction() {
     return new Promise((resolve) => {
-        formStepId = gender.match(new RegExp(/form\/(\d+)\/render/));
-        formStepId = formStepId[1];
-        xh_args.headers.referer = gender;
         console.log(`[${$.getTime()}] 正在确认预约`);
         message += `正在确认预约\n`;
-        const options = {
+        $.request('post', {
             url: 'https://usc.gzhu.edu.cn/infoplus/interface/doAction',
             body: handleData({
                 formData: JSON.stringify(field),
@@ -533,8 +482,7 @@ function doAction() {
                 remark: ""
             }),
             headers: xh_args.headers
-        };
-        $.post(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
                 if (safeGet(data)) {
                     let result = JSON.parse(data);
@@ -564,10 +512,9 @@ function doAction() {
 
 function sendBark(title) {
     return new Promise((resolve) => {
-        const options = {
+        $.request('get', {
             url: `https://api.day.app/${xh_args.barkId}/${title}/${encodeURIComponent(message)}`
-        };
-        $.get(options, (err, resp, data) => {
+        }, (err, resp, data) => {
             try {
                 if (safeGet(data)) {
                     let { code, message } = JSON.parse(data);
@@ -584,14 +531,17 @@ function sendBark(title) {
 
 function safeGet(data) {
     try {
-        if (typeof JSON.parse(data) == "object") {
-            return true;
-        }
+        return typeof JSON.parse(data) === "object";
     } catch (e) {
-        console.log(e);
-        console.log(`数据转换失败，请检查数据是否有误`);
+        console.log(`Error: ${e.message}. Please check your data.`);
         return false;
     }
+}
+
+function getTextBetween(str, start, end) {
+    const regex = new RegExp(`${start}([\\s\\S]*?)${end}`, 'i');
+    const match = str.match(regex);
+    return match ? match[1] : '';
 }
 
 // prettier-ignore
@@ -603,40 +553,26 @@ function Env(t, e) {
             this.logSeparator = "\n";
             this.startTime = (new Date).getTime();
             Object.assign(this, e);
-            this.log(`🔔${this.name}任务开始!`);
+            this.log("", `🔔${this.name}, 开始!`);
         }
 
-        initGotEnv() {
-            this.got = this.got ? this.got : require("got");
+        request(method, options, callback) {
+            const got = require('got');
+            got[method](options).then(
+                response => {
+                    const { statusCode, headers, body } = response;
+                    callback(null, { status: statusCode, headers, body }, body);
+                },
+                error => {
+                    const { message, response } = error;
+                    callback(message, response, response && response.body);
+                }
+            );
         }
 
-        post(t, e = (() => {})) {
-            this.initGotEnv();
-            const { url: s, ...i } = t;
-            this.got.post(s, i).then(t => {
-                const { statusCode: s, headers: r, body: o } = t;
-                e(null, { status: s, statusCode: s, headers: r, body: o }, o);
-            }, t => {
-                const { message: s, response: i } = t;
-                e(s, i, i && i.body);
-            });
-        }
-
-        get(t, e = (() => {})) {
-            this.initGotEnv();
-            this.got(t).on("redirect", () => {
-            }).then(t => {
-                const { statusCode: s, headers: r, body: o } = t;
-                e(null, { status: s, statusCode: s, headers: r, body: o }, o);
-            }, t => {
-                const { message: s, response: i } = t;
-                e(s, i, i && i.body);
-            });
-        }
-
-        log(...t) {
-            t.length > 0 && (this.logs = [...this.logs, ...t]);
-            console.log(t.join(this.logSeparator));
+        log(...message) {
+            if (message.length > 0) this.logs = [...this.logs, ...message];
+            console.log(message.join(this.logSeparator));
         }
 
         wait(t) {
@@ -645,26 +581,20 @@ function Env(t, e) {
 
         done() {
             const e = (new Date).getTime(), s = (e - this.startTime) / 1e3;
-            this.log("", `🔔${this.name}任务结束! 总耗时 🕛 ${s} 秒`);
+            this.log("", `🔔${this.name}, 结束! 🕛 总耗时 ${s} 秒`);
+        }
+
+        getCurrentTime(isHour = true, isMinute = true, isSecond = true) {
+            const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
+            let formattedTime = "";
+            if (isHour) formattedTime += `${now.getHours().toString().padStart(2, "0")}:`;
+            if (isMinute) formattedTime += `${now.getMinutes().toString().padStart(2, "0")}:`;
+            if (isSecond) formattedTime += `${now.getSeconds().toString().padStart(2, "0")}`;
+            return formattedTime;
         }
 
         getTime() {
-            let date = new Date(),
-                year = date.getFullYear(),
-                month = (date.getMonth() + 1) < 10 ? `0${date.getMonth() + 1}` : date.getMonth() + 1,
-                day = date.getDate() < 10 ? `0${date.getDate()}` : date.getDate(),
-                hours = date.getHours() < 10 ? `0${date.getHours()}` : date.getHours(),
-                minutes = date.getMinutes() < 10 ? `0${date.getMinutes()}` : date.getMinutes(),
-                seconds = date.getSeconds() < 10 ? `0${date.getSeconds()}` : date.getSeconds();
-            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-        }
-
-        getNow() {
-            let date = new Date(),
-                hours = date.getHours() < 10 ? `0${date.getHours()}` : date.getHours(),
-                minutes = date.getMinutes() < 10 ? `0${date.getMinutes()}` : date.getMinutes(),
-                seconds = date.getSeconds() < 10 ? `0${date.getSeconds()}` : date.getSeconds();
-            return `${hours}:${minutes}:${seconds}`;
+            return (new Date(+new Date() + 28800000)).toISOString().replace('T', ' ').substring(0, 19);
         }
 
         loadAuthor() {
