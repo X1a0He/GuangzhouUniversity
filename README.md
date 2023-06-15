@@ -12,8 +12,17 @@
 
 # Log
 
+- 2023-06-15 14:00 Update [yuyue.js](https://github.com/X1a0He/GuangzhouUniversity/blob/main/yuyue.js)
+
+```
+1. 修复了官网新增校区选项导致报错的问题
+2. 支持指定校区，通过环境变量 RESERVE_CAMPUS 控制，默认为 大学城校区 ，不建议修改，因为只有大学城校区有羽毛球
+3. 新增判断错误代码14052，当出现14052代码时，不再继续往下执行
+```
+
 - 2023-03-11 14:00 Update [yuyue.js](https://github.com/X1a0He/GuangzhouUniversity/blob/main/yuyue.js)
 
+```
 1. 合并了 Env 的 get 和 post 代码逻辑
 2. 移除了用正则表达式匹配的方式来处理 `csrfToken`、`workflowId`、`formStepId`，取而代之的是 `getTextBetween` 方法
 3. 当获取预约链接失败时，不再执行脚本
@@ -27,6 +36,7 @@
 11. 优化精简了对指定时间指定场地号数的判断和提交逻辑，用简短的代码实现同样的目的
 12. 简单优化了 `safeGet` 方法
 13. 重写 `Env` 中的 `getCurrentTime` 和 `getTime` 方法，更加高效可控
+```
 
 - 2023-03-03 13:30 Upload [yuyue.js](https://github.com/X1a0He/GuangzhouUniversity/blob/main/yuyue.js)
 

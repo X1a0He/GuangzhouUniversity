@@ -9,6 +9,8 @@ let xh_args = {
     run_time: process.env.RESERVE_RUN_TIME || "12:30:00",
     // 指定时间，精确判断
     time: process.env.RESERVE_TIME || "19:30",
+    // 指定校区，精确判断 20230615
+    campus: process.env.RESERVE_CAMPUS || "大学城校区",
     location: process.env.RESERVE_LOCATION || "风雨跑廊羽毛球场",
     // 指定场地号数，精确判断
     area: +process.env.RESERVE_AREA || 4,
@@ -25,7 +27,7 @@ let xh_args = {
 let csrfToken, workflowId, formData, cookieExpired = false, gender,
     formStepId, instanceId, entryId, codeName, codeId, field, getLinkFailed,
     cDXXList, orderArray = [], reservedIndex, reservedTime, specifyCount = 0, specifyComplete = false,
-    message = "", reservedSuccess = false, notNow = false, firstSelectComplete = false;
+    message = "", reservedSuccess = false, notNow = false, firstSelectComplete = false, reservedError = false;
 !(async () => {
     $.loadAuthor();
     if (!xh_args.cookie) {
@@ -45,10 +47,10 @@ let csrfToken, workflowId, formData, cookieExpired = false, gender,
     const duration = ((new Date).getTime() - reservedTime) / 1e3;
     message += `预约执行完毕，预约耗时 ${duration} 秒\n`;
     console.log(`[${$.getTime()}] 预约执行完毕，预约耗时 ${duration} 秒`);
-    console.log(`[${$.getTime()}] 版本代码: 20230311`);
+    console.log(`[${$.getTime()}] 版本代码: 20230615`);
     if (xh_args.barkId) {
         console.log(`\n[${$.getTime()}] 正在推送结果...`);
-        message += `\n执行时间: ${$.getTime()}\n版本代码: 20230311`;
+        message += `\n执行时间: ${$.getTime()}\n版本代码: 20230615`;
         await sendBark("广州大学羽毛球场地预约情况");
     }
 })().catch((e) => {
@@ -69,6 +71,7 @@ async function run_main() {
     await runInterfaceSuggest("TYCDYY_YYRQ", "", true);
     specifyCount = 0;
     await runInterfaceFieldChanging();
+    if (reservedError) return;
     for (let i = 0; i < xh_args.retry_count && !reserved; i++) {
         reservedSuccess = false;
         await runInterfaceListNextStepsUsers(i);
@@ -115,6 +118,7 @@ function runTYCDYYStart() {
                     message += `csrfToken:${csrfToken}\nworkflowId:${workflowId}\\n`;
                 }
             } catch (e) {
+                cookieExpired = true;
                 console.log(e);
             } finally {
                 resolve();
@@ -230,9 +234,11 @@ function runInterfaceRender() {
 
 function fieldChanging(obj) {
     field = {
-        "fieldSF": obj.fieldSF,
         "fieldYZYMFQ": (Math.cos(parseInt(obj.fieldLSH)) + 10000) * 1000,
         "fieldLSH": obj.fieldLSH,
+        "fieldSF": obj.fieldSF,
+        "fieldYYSFjtsj": "",
+        "fieldQXYYjtsj": "",
         "fieldSQSJ": obj.fieldSQSJ,
         "fieldXM": obj.fieldXM,
         "fieldXM_Name": obj.fieldXM_Name,
@@ -240,14 +246,18 @@ function fieldChanging(obj) {
         "fieldXY": obj.fieldXY,
         "fieldXY_Name": obj.fieldXY_Name,
         "fieldLXFS": "13900000000",
-        "fieldYYXM": "羽毛球",
+        "fieldXQ": xh_args.campus,
+        "fieldXQ_Name": xh_args.campus,
+        "fieldYYXM": `羽毛球${xh_args.campus}`,
         "fieldYYXM_Name": "羽毛球",
+        "fieldYYXM_Attr": `{"_parent":"${xh_args.campus}"}`,
         "fieldXZDD": xh_args.location,
         "fieldXZDD_Name": xh_args.location,
-        "fieldXZDD_Attr": `{"_parent":"羽毛球"}`,
+        "fieldXZDD_Attr": `{"_parent":"羽毛球${xh_args.campus}"}`,
         "fieldYYRQ": codeId,
         "fieldYYRQ_Name": codeName,
-        "fieldZJ": codeId
+        "fieldZJ": codeId,
+        "fieldSFBZ": ""
     };
     return field;
 }
@@ -305,7 +315,7 @@ function runInterfaceFieldChanging() {
                 fieldName: 'fieldYYRQ',
                 fieldValue: codeId,
                 path: '',
-                boundFields: 'fieldXH,fieldZJ,fieldFZPD,fieldYYXM,fieldXM,fieldLSH,fieldSF,fieldSQSJ,fieldYYCD,fieldXY,fieldYYDD,fieldYYRQ,fieldYZYMFQ,fieldSJD,fieldLXFS,fieldXZDD,fieldXZ,fieldTYXM,fieldYYZT',
+                boundFields: 'fieldXH,fieldZJ,fieldXM,fieldLSH,fieldSQSJ,fieldYYSFjtsj,fieldSFBZ,fieldYYCD,fieldXY,fieldYZYMFQ,fieldXZDD,fieldXZ,fieldXQ,fieldTYXM,fieldFZPD,fieldYYXM,fieldSF,fieldYLLY,fieldYYDD,fieldYYRQ,fieldSJD,fieldLXFS,fieldQXYYjtsj,fieldYYZT',
                 csrfToken: csrfToken,
                 lang: 'zh',
                 instanceId: instanceId,
@@ -372,6 +382,9 @@ function runInterfaceFieldChanging() {
                                 }
                             }
                         }
+                    } else if (ecode === 14052) {
+                        console.log(error);
+                        reservedError = true;
                     }
                 }
             } catch (e) {
@@ -430,7 +443,7 @@ function runInterfaceListNextStepsUsers(index) {
                 actionId: 1,
                 timestamp: Math.round(new Date() / 1000),
                 rand: Math.random() * 999,
-                boundFields: 'fieldXH,fieldZJ,fieldFZPD,fieldYYXM,fieldXM,fieldLSH,fieldSF,fieldSQSJ,fieldYYCD,fieldXY,fieldYYDD,fieldYYRQ,fieldYZYMFQ,fieldSJD,fieldLXFS,fieldXZDD,fieldXZ,fieldTYXM,fieldYYZT',
+                boundFields: 'fieldXH,fieldZJ,fieldXM,fieldLSH,fieldSQSJ,fieldYYSFjtsj,fieldSFBZ,fieldYYCD,fieldXY,fieldYZYMFQ,fieldXZDD,fieldXZ,fieldXQ,fieldTYXM,fieldFZPD,fieldYYXM,fieldSF,fieldYLLY,fieldYYDD,fieldYYRQ,fieldSJD,fieldLXFS,fieldQXYYjtsj,fieldYYZT',
                 csrfToken: csrfToken,
                 lang: 'zh'
             }),
@@ -475,7 +488,7 @@ function doAction() {
                 rand: Math.random() * 999,
                 stepId: formStepId,
                 timestamp: Math.round(new Date() / 1000),
-                boundFields: 'fieldXH,fieldZJ,fieldFZPD,fieldYYXM,fieldXM,fieldLSH,fieldSF,fieldSQSJ,fieldYYCD,fieldXY,fieldYYDD,fieldYYRQ,fieldYZYMFQ,fieldSJD,fieldLXFS,fieldXZDD,fieldXZ,fieldTYXM,fieldYYZT',
+                boundFields: 'fieldXH,fieldZJ,fieldXM,fieldLSH,fieldSQSJ,fieldYYSFjtsj,fieldSFBZ,fieldYYCD,fieldXY,fieldYZYMFQ,fieldXZDD,fieldXZ,fieldXQ,fieldTYXM,fieldFZPD,fieldYYXM,fieldSF,fieldYLLY,fieldYYDD,fieldYYRQ,fieldSJD,fieldLXFS,fieldQXYYjtsj,fieldYYZT',
                 csrfToken: csrfToken,
                 lang: 'zh',
                 nextUsers: JSON.stringify({}),
