@@ -36,6 +36,9 @@ let csrfToken, workflowId, formData, cookieExpired = false, gender,
     }
     xh_args.headers.Cookie = xh_args.cookie;
     message = '';
+    await runTYCDYYStart();
+    if (cookieExpired) return;
+    getLinkFailed = false;
     if (!xh_args.run_immediately) {
         console.log(`[${$.getTime()}] 本次任务不会立即执行，将在 ${xh_args.run_time} 后执行...`);
         while ($.getCurrentTime() < xh_args.run_time) {
@@ -47,10 +50,10 @@ let csrfToken, workflowId, formData, cookieExpired = false, gender,
     const duration = ((new Date).getTime() - reservedTime) / 1e3;
     message += `预约执行完毕，预约耗时 ${duration} 秒\n`;
     console.log(`[${$.getTime()}] 预约执行完毕，预约耗时 ${duration} 秒`);
-    console.log(`[${$.getTime()}] 版本代码: 20230615`);
+    console.log(`[${$.getTime()}] 版本代码: 20230914`);
     if (xh_args.barkId) {
         console.log(`\n[${$.getTime()}] 正在推送结果...`);
-        message += `\n执行时间: ${$.getTime()}\n版本代码: 20230615`;
+        message += `\n执行时间: ${$.getTime()}\n版本代码: 20230914`;
         await sendBark("广州大学羽毛球场地预约情况");
     }
 })().catch((e) => {
@@ -61,14 +64,14 @@ async function run_main() {
     console.log(`[${$.getTime()}] 开始获取预约链接`);
     await initData();
     reservedTime = (new Date).getTime();
-    await runTYCDYYStart();
-    if (cookieExpired) return;
-    getLinkFailed = false;
+    // await runTYCDYYStart();
+    // if (cookieExpired) return;
     await runInterfaceStart();
     if (getLinkFailed) return;
     await runInterfaceRender();
+    await generateDate();
     if (notNow) return;
-    await runInterfaceSuggest("TYCDYY_YYRQ", "", true);
+    // await runInterfaceSuggest("TYCDYY_YYRQ", "", true);
     specifyCount = 0;
     await runInterfaceFieldChanging();
     if (reservedError) return;
@@ -80,8 +83,6 @@ async function run_main() {
 }
 
 function initData() {
-    csrfToken = "";
-    workflowId = "";
     formData = "";
     cookieExpired = false;
     gender = "";
@@ -102,6 +103,7 @@ function initData() {
 }
 
 function runTYCDYYStart() {
+    console.log(`[${$.getTime()}] 正在预获取值...`);
     return new Promise((resolve) => {
         $.request('get', {
             url: 'https://usc.gzhu.edu.cn/infoplus/form/TYCDYY/start',
@@ -115,6 +117,8 @@ function runTYCDYYStart() {
                 } else {
                     csrfToken = getTextBetween(data, `csrfToken" content="`, `"`);
                     workflowId = getTextBetween(data, `workflowId = "`, `"`);
+                    console.log(`[${$.getTime()}] csrfToken: ${csrfToken}`);
+                    console.log(`[${$.getTime()}] workflowId: ${workflowId}`);
                     message += `csrfToken:${csrfToken}\nworkflowId:${workflowId}\\n`;
                 }
             } catch (e) {
@@ -260,6 +264,21 @@ function fieldChanging(obj) {
         "fieldSFBZ": ""
     };
     return field;
+}
+
+function generateDate() {
+    let date = new Date();
+    date.setDate(date.getDate() + 1);
+    let year = date.getFullYear(),
+        month = (date.getMonth() + 1).toString().padStart(2, '0'),
+        day = date.getDate().toString().padStart(2, '0'),
+        dayOfWeek = date.getDay(),
+        daysOfWeek = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    codeId = daysOfWeek[dayOfWeek];
+    codeName = `${year}-${month}-${day}`;
+    field.fieldYYRQ = codeId;
+    field.fieldZJ = codeId;
+    field.fieldYYRQ_Name = codeName;
 }
 
 function runInterfaceSuggest(code, parent, isTopLevel) {
@@ -492,7 +511,7 @@ function doAction() {
                 csrfToken: csrfToken,
                 lang: 'zh',
                 nextUsers: JSON.stringify({}),
-                remark: ""
+                remark: "是"
             }),
             headers: xh_args.headers
         }, (err, resp, data) => {

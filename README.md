@@ -12,6 +12,14 @@
 
 # Log
 
+- 2023-09-14 19:55 Update [yuyue.js](https://github.com/X1a0He/GuangzhouUniversity/blob/main/yuyue.js)
+
+```
+1. 修复了官网增加备注项导致预约失败或报错的问题
+2. 将获取csrfToken和workflowId提前到了"是否立即执行"判断前，减少了一次主函数的网络请求，略微减少因网络卡顿导致的预约失败问题
+3. 将原来从服务器中获取预约时间和周几的代码暂时注释，改为由本地生成，减少了一次主函数的网络请求，略微减少因网络卡顿导致的预约失败问题
+```
+
 - 2023-06-15 14:00 Update [yuyue.js](https://github.com/X1a0He/GuangzhouUniversity/blob/main/yuyue.js)
 
 ```
